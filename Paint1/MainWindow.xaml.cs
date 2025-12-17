@@ -29,10 +29,9 @@ namespace Paint1
         private WriteableBitmap svBitmap;
         private Image svImage;
         private Shape selectedShape = null;
-        private Dictionary<Shape, (Brush originalStroke, double originalStrokeThickness, Brush originalFill, Effect originalEffect)> shapeOriginals = new Dictionary<Shape, (Brush, double, Brush, Effect)>();
+        private Dictionary<Shape, (Brush originalStroke, double originalStrokeThickness, Brush originalFill)> shapeOriginals = new Dictionary<Shape, (Brush, double, Brush)>();
         private bool isMoving = false;
         private Vector moveOffset;
-        private Point previousMousePoint;
 
         public MainWindow()
         {
@@ -266,7 +265,14 @@ namespace Paint1
                     selectedShape.Stroke = new SolidColorBrush(currentStrokeColor);
                 else if (selectedShape.Fill != null)
                     selectedShape.Fill = new SolidColorBrush(currentFillColor);
-                shapeOriginals[selectedShape] = (selectedShape.Stroke, selectedShape.StrokeThickness, selectedShape.Fill, shapeOriginals[selectedShape].originalEffect);
+
+                // Обновляем оригинальные свойства цветов и толщины, чтобы сохранить изменения при деселекте
+                // (Effect не включаем, так как это временный эффект для выделения)
+                shapeOriginals[selectedShape] = (
+                    selectedShape.Stroke,
+                    selectedShape.StrokeThickness,
+                    selectedShape.Fill
+                );
             }
         }
 
@@ -304,7 +310,7 @@ namespace Paint1
         {
             Point point = e.GetPosition(SVSquare);
             saturation = Math.Min(1.0, Math.Max(0.0, point.X / SVSquare.ActualWidth));
-            value = 1.0 - Math.Min(1.0, Math.Max(0.0, point.Y / SVSquare.ActualHeight));
+            value = 1.0 - Math.Min(1.0, Math.Max((double)0.0, point.Y / SVSquare.ActualHeight));
             UpdateSVMarkerPosition();
             UpdateColor();
         }
@@ -313,11 +319,14 @@ namespace Paint1
         {
             if (selectedShape != null)
             {
-                var orig = shapeOriginals[selectedShape];
-                selectedShape.Stroke = orig.originalStroke;
-                selectedShape.StrokeThickness = orig.originalStrokeThickness;
-                selectedShape.Fill = orig.originalFill;
-                selectedShape.Effect = orig.originalEffect;
+                if (shapeOriginals.ContainsKey(selectedShape))
+                {
+                    var orig = shapeOriginals[selectedShape];
+                    selectedShape.Stroke = orig.originalStroke;
+                    selectedShape.StrokeThickness = orig.originalStrokeThickness;
+                    selectedShape.Fill = orig.originalFill;
+                }
+                selectedShape.Effect = null; // Всегда снимаем эффект при деселекте
                 shapeOriginals.Remove(selectedShape);
                 selectedShape = null;
             }
@@ -328,13 +337,15 @@ namespace Paint1
             if (selectedShape != null)
                 Deselect();
             selectedShape = shape;
-            shapeOriginals[selectedShape] = (selectedShape.Stroke, selectedShape.StrokeThickness, selectedShape.Fill, selectedShape.Effect);
+            // Сохраняем текущие свойства (без эффекта) перед применением нового эффекта
+            shapeOriginals[selectedShape] = (selectedShape.Stroke, selectedShape.StrokeThickness, selectedShape.Fill);
+            // Применяем эффект для выделения
             selectedShape.Effect = new DropShadowEffect
             {
-                Color = Colors.Cyan,
-                BlurRadius = 10,
-                ShadowDepth = 0,
-                Opacity = 1.0
+                Color = Colors.LightBlue,
+                ShadowDepth = 0,    // Без смещения тени (свечение по контуру)
+                BlurRadius = 10,    // Радиус размытия (настраивай для слабого эффекта: меньше = тоньше, больше = сильнее)
+                Opacity = 0.7      // Прозрачность (настраивай: меньше = слабее)
             };
         }
 
@@ -352,20 +363,26 @@ namespace Paint1
             Shape hitShape = GetHitShape(clickPoint);
             if (hitShape != null && !isDrawing)
             {
+                // Если клик на уже выбранную фигуру, деселект и реселект (чтобы обновить оригиналы, если изменили цвет)
                 SelectShape(hitShape);
-                double left = Canvas.GetLeft(hitShape);
-                double top = Canvas.GetTop(hitShape);
-                if (double.IsNaN(left)) left = 0;
-                if (double.IsNaN(top)) top = 0;
-                moveOffset = new Vector(clickPoint.X - left, clickPoint.Y - top);
-                previousMousePoint = clickPoint;
+                if (hitShape is Line line)
+                {
+                    moveOffset = new Vector(clickPoint.X - line.X1, clickPoint.Y - line.Y1);
+                }
+                else
+                {
+                    double left = Canvas.GetLeft(hitShape);
+                    double top = Canvas.GetTop(hitShape);
+                    if (double.IsNaN(left)) left = 0;
+                    if (double.IsNaN(top)) top = 0;
+                    moveOffset = new Vector(clickPoint.X - left, clickPoint.Y - top);
+                }
                 isMoving = true;
             }
             else
             {
                 Deselect();
                 startPoint = clickPoint;
-                previousMousePoint = clickPoint;
                 isDrawing = true;
                 switch (selectedTool)
                 {
@@ -380,25 +397,25 @@ namespace Paint1
                         break;
                 }
                 Canvas1.Children.Add(currentShape);
-                shapeOriginals[currentShape] = (currentShape.Stroke, currentShape.StrokeThickness, currentShape.Fill, currentShape.Effect);
+                shapeOriginals[currentShape] = (currentShape.Stroke, currentShape.StrokeThickness, currentShape.Fill); // Сохраняем без эффекта
             }
         }
 
         private void Canvas_MouseMove(object sender, MouseEventArgs e)
         {
-            Point currentPoint = e.GetPosition(Canvas1);
             if (isMoving && selectedShape != null && !isDrawing)
             {
+                Point currentPoint = e.GetPosition(Canvas1);
                 if (selectedShape is Line line)
                 {
-                    Vector delta = currentPoint - previousMousePoint;
-                    line.X1 += delta.X;
-                    line.Y1 += delta.Y;
-                    line.X2 += delta.X;
-                    line.Y2 += delta.Y;
-                    previousMousePoint = currentPoint;
-                    Canvas.SetLeft(line, 0);
-                    Canvas.SetTop(line, 0);
+                    double newX1 = currentPoint.X - moveOffset.X;
+                    double newY1 = currentPoint.Y - moveOffset.Y;
+                    double deltaX = newX1 - line.X1;
+                    double deltaY = newY1 - line.Y1;
+                    line.X1 += deltaX;
+                    line.Y1 += deltaY;
+                    line.X2 += deltaX;
+                    line.Y2 += deltaY;
                 }
                 else
                 {
@@ -443,18 +460,20 @@ namespace Paint1
 
         private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (isDrawing)
-            {
-                isDrawing = false;
-                if (undoStack.Count >= 5)
-                    undoStack.RemoveAt(0);
-                undoStack.Add(currentShape);
-                redoStack.Clear();
-            }
             if (isMoving)
             {
                 isMoving = false;
+                // После перетаскивания оставляем фигуру выбранной, цвета уже сохранены
+            }
+            else if (isDrawing && currentShape != null)
+            {
+                if (undoStack.Count >= 5)
+                    undoStack.RemoveAt(0);
+                undoStack.Add(currentShape);
+                currentShape = null;
+                isDrawing = false;
             }
         }
     }
 }
+
