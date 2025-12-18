@@ -338,6 +338,8 @@ namespace Paint1
 
         private void SelectShape(Shape shape)
         {
+            if (shape == null) return;
+
             if (selectedShape != null)
                 Deselect();
             selectedShape = shape;
@@ -350,6 +352,7 @@ namespace Paint1
                 Opacity = 0.7
             };
         }
+
 
         private Shape GetHitShape(Point point)
         {
@@ -423,9 +426,17 @@ namespace Paint1
 
             if (selectedTool == "Polygon" && isDrawingPolygon)
             {
-                try
+                if (polygonPoints.Count <= 2)
                 {
-                    if (polygonPoints.Count >= 3)
+                    if (currentPolygon != null)
+                    {
+                        Canvas1.Children.Remove(currentPolygon);
+                        currentPolygon = null;
+                    }
+                }
+                else
+                {
+                    try
                     {
                         if (currentPolygon != null)
                         {
@@ -435,24 +446,21 @@ namespace Paint1
                         if (undoStack.Count >= 5)
                             undoStack.RemoveAt(0);
                         undoStack.Add(currentPolygon);
-                        SelectShape(currentPolygon);
+                        if (currentPolygon != null)
+                            SelectShape(currentPolygon);
+                        currentPolygon = null;
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Ошибка при завершении полигона: {ex.Message}");
+
+                        if (currentPolygon != null)
+                            Canvas1.Children.Remove(currentPolygon);
                     }
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Ошибка при завершении полигона: {ex.Message}");
-                    if (currentPolygon != null)
-                        Canvas1.Children.Remove(currentPolygon);
-                }
-                finally
-                {
-                    if (currentPolygon != null && polygonPoints.Count < 3)
-                        Canvas1.Children.Remove(currentPolygon);
 
-                    isDrawingPolygon = false;
-                    polygonPoints.Clear();
-                    currentPolygon = null;
-                }
+                isDrawingPolygon = false;
+                polygonPoints.Clear();
             }
         }
 
@@ -529,10 +537,13 @@ namespace Paint1
             else if (isDrawing)
             {
                 isDrawing = false;
-                if (undoStack.Count >= 5)
-                    undoStack.RemoveAt(0);
-                undoStack.Add(currentShape);
-                SelectShape(currentShape);
+                if (currentShape != null)
+                {
+                    if (undoStack.Count >= 5)
+                        undoStack.RemoveAt(0);
+                    undoStack.Add(currentShape);
+                    SelectShape(currentShape);
+                }
                 currentShape = null;
             }
         }
