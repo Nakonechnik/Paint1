@@ -31,7 +31,11 @@ namespace Paint1
         private Shape selectedShape = null;
         private Dictionary<Shape, (Brush originalStroke, double originalStrokeThickness, Brush originalFill)> shapeOriginals = new Dictionary<Shape, (Brush, double, Brush)>();
         private bool isMoving = false;
-        private Vector moveOffset;
+        private Point lastMousePosition;
+        private bool isDrawingPolygon = false;
+        private List<Point> polygonPoints = new List<Point>();
+        private Polygon currentPolygon = null;
+        // Убираем polygonBounds, так как не используется и может вызвать исключения при расчёте
 
         public MainWindow()
         {
@@ -40,9 +44,11 @@ namespace Paint1
             Canvas1.MouseDown += Canvas_MouseDown;
             Canvas1.MouseMove += Canvas_MouseMove;
             Canvas1.MouseUp += Canvas_MouseUp;
+            Canvas1.MouseRightButtonDown += Canvas_MouseRightButtonDown;
             LineButton.Click += (s, e) => { selectedTool = "Line"; };
             SquareButton.Click += (s, e) => { selectedTool = "Square"; };
             EllipseButton.Click += (s, e) => { selectedTool = "Ellipse"; };
+            PolygonButton.Click += (s, e) => { selectedTool = "Polygon"; };
             if (ZoomSlider != null)
                 ZoomSlider.ValueChanged += ZoomSlider_ValueChanged;
             UpdateColorPreviews();
@@ -337,16 +343,15 @@ namespace Paint1
             if (selectedShape != null)
                 Deselect();
             selectedShape = shape;
-            // Сохраняем текущие свойства (без эффекта) перед применением нового эффекта
             shapeOriginals[selectedShape] = (selectedShape.Stroke, selectedShape.StrokeThickness, selectedShape.Fill);
-            // Применяем эффект для выделения
             selectedShape.Effect = new DropShadowEffect
             {
                 Color = Colors.LightBlue,
-                ShadowDepth = 0,    // Без смещения тени (свечение по контуру)
-                BlurRadius = 10,    // Радиус размытия (настраивай для слабого эффекта: меньше = тоньше, больше = сильнее)
-                Opacity = 0.7      // Прозрачность (настраивай: меньше = слабее)
+                ShadowDepth = 0,
+                BlurRadius = 10,
+                Opacity = 0.7
             };
+            // Убираем расчёт bounds для полигона, так как он не нужен и может вызвать exception
         }
 
         private Shape GetHitShape(Point point)
@@ -361,23 +366,23 @@ namespace Paint1
         {
             Point clickPoint = e.GetPosition(Canvas1);
             Shape hitShape = GetHitShape(clickPoint);
-            if (hitShape != null && !isDrawing)
+
+            if (hitShape != null && !isDrawingPolygon)
             {
-                // Если клик на уже выбранную фигуру, деселект и реселект (чтобы обновить оригиналы, если изменили цвет)
                 SelectShape(hitShape);
-                if (hitShape is Line line)
-                {
-                    moveOffset = new Vector(clickPoint.X - line.X1, clickPoint.Y - line.Y1);
-                }
-                else
-                {
-                    double left = Canvas.GetLeft(hitShape);
-                    double top = Canvas.GetTop(hitShape);
-                    if (double.IsNaN(left)) left = 0;
-                    if (double.IsNaN(top)) top = 0;
-                    moveOffset = new Vector(clickPoint.X - left, clickPoint.Y - top);
-                }
                 isMoving = true;
+                lastMousePosition = clickPoint;
+            }
+            else if (selectedTool == "Polygon" && e.ChangedButton == MouseButton.Left)
+            {
+                if (!isDrawingPolygon)
+                {
+                    isDrawingPolygon = true;
+                    polygonPoints.Clear();
+                    Deselect();
+                }
+                polygonPoints.Add(clickPoint);
+                // Убираем создание/обновление currentPolygon здесь — будем делать только при завершении
             }
             else
             {
@@ -396,64 +401,115 @@ namespace Paint1
                         currentShape = new Ellipse { Width = 0, Height = 0, Stroke = new SolidColorBrush(currentStrokeColor), Fill = new SolidColorBrush(currentFillColor), StrokeThickness = 2 };
                         break;
                 }
-                Canvas1.Children.Add(currentShape);
-                shapeOriginals[currentShape] = (currentShape.Stroke, currentShape.StrokeThickness, currentShape.Fill); // Сохраняем без эффекта
+                if (currentShape != null)
+                {
+                    Canvas1.Children.Add(currentShape);
+                    shapeOriginals[currentShape] = (currentShape.Stroke, currentShape.StrokeThickness, currentShape.Fill);
+                }
+            }
+        }
+
+        private void Canvas_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (selectedShape != null && selectedTool == "Polygon")
+            {
+                // При выборе полигона и ПКМ — снимаем выделение, чтобы избежать конфликтов/крахов
+                Deselect();
+                return;
+            }
+            if (selectedTool == "Polygon" && isDrawingPolygon)
+            {
+                try
+                {
+                    if (polygonPoints.Count >= 3)
+                    {
+                        // Завершаем и создаём полигон только при завершении
+                        currentPolygon = new Polygon
+                        {
+                            Stroke = new SolidColorBrush(currentStrokeColor),
+                            Fill = new SolidColorBrush(currentFillColor),
+                            StrokeThickness = 2,
+                            Points = new PointCollection(polygonPoints)
+                        };
+                        Canvas1.Children.Add(currentPolygon);
+                        shapeOriginals[currentPolygon] = (currentPolygon.Stroke, currentPolygon.StrokeThickness, currentPolygon.Fill);
+
+                        if (undoStack.Count >= 5)
+                            undoStack.RemoveAt(0);
+                        undoStack.Add(currentPolygon);
+                        SelectShape(currentPolygon);
+                        currentPolygon = null;
+                    }
+                    // Если точек <3, просто отменяем без добавления
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка при заверщении полигона: {ex.Message}");
+                    // Или логируй в файл, но для простоты — MessageBox
+                }
+                // Сбрасываем состояние
+                isDrawingPolygon = false;
+                polygonPoints.Clear();
+                currentPolygon = null;
             }
         }
 
         private void Canvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (isMoving && selectedShape != null && !isDrawing)
+            Point currentPoint = e.GetPosition(Canvas1);
+            if (selectedShape != null && isMoving)
             {
-                Point currentPoint = e.GetPosition(Canvas1);
+                Vector delta = currentPoint - lastMousePosition;
                 if (selectedShape is Line line)
                 {
-                    double newX1 = currentPoint.X - moveOffset.X;
-                    double newY1 = currentPoint.Y - moveOffset.Y;
-                    double deltaX = newX1 - line.X1;
-                    double deltaY = newY1 - line.Y1;
-                    line.X1 += deltaX;
-                    line.Y1 += deltaY;
-                    line.X2 += deltaX;
-                    line.Y2 += deltaY;
+                    line.X1 += delta.X;
+                    line.Y1 += delta.Y;
+                    line.X2 += delta.X;
+                    line.Y2 += delta.Y;
+                }
+                else if (selectedShape is Polygon poly && poly.Points.Count > 0)
+                {
+                    for (int i = 0; i < poly.Points.Count; i++)
+                    {
+                        Point p = poly.Points[i];
+                        poly.Points[i] = new Point(p.X + delta.X, p.Y + delta.Y);
+                    }
                 }
                 else
                 {
-                    double newLeft = currentPoint.X - moveOffset.X;
-                    double newTop = currentPoint.Y - moveOffset.Y;
-                    Canvas.SetLeft(selectedShape, newLeft);
-                    Canvas.SetTop(selectedShape, newTop);
+                    double left = Canvas.GetLeft(selectedShape);
+                    double top = Canvas.GetTop(selectedShape);
+                    if (double.IsNaN(left)) left = 0;
+                    if (double.IsNaN(top)) top = 0;
+                    Canvas.SetLeft(selectedShape, left + delta.X);
+                    Canvas.SetTop(selectedShape, top + delta.Y);
                 }
+                lastMousePosition = currentPoint;
             }
-            else if (isDrawing && currentShape != null)
+            else if (isDrawing)
             {
-                Point endPoint = e.GetPosition(Canvas1);
                 if (currentShape is Line line)
                 {
-                    line.X2 = endPoint.X;
-                    line.Y2 = endPoint.Y;
+                    line.X2 = currentPoint.X;
+                    line.Y2 = currentPoint.Y;
                 }
                 else if (currentShape is Rectangle rect)
                 {
-                    double minX = Math.Min(startPoint.X, endPoint.X);
-                    double minY = Math.Min(startPoint.Y, endPoint.Y);
-                    double width = Math.Abs(endPoint.X - startPoint.X);
-                    double height = Math.Abs(endPoint.Y - startPoint.Y);
+                    double width = Math.Abs(currentPoint.X - startPoint.X);
+                    double height = Math.Abs(currentPoint.Y - startPoint.Y);
                     rect.Width = width;
                     rect.Height = height;
-                    Canvas.SetLeft(rect, minX);
-                    Canvas.SetTop(rect, minY);
+                    Canvas.SetLeft(rect, Math.Min(startPoint.X, currentPoint.X));
+                    Canvas.SetTop(rect, Math.Min(startPoint.Y, currentPoint.Y));
                 }
                 else if (currentShape is Ellipse ellipse)
                 {
-                    double minX = Math.Min(startPoint.X, endPoint.X);
-                    double minY = Math.Min(startPoint.Y, endPoint.Y);
-                    double width = Math.Abs(endPoint.X - startPoint.X);
-                    double height = Math.Abs(endPoint.Y - startPoint.Y);
+                    double width = Math.Abs(currentPoint.X - startPoint.X);
+                    double height = Math.Abs(currentPoint.Y - startPoint.Y);
                     ellipse.Width = width;
                     ellipse.Height = height;
-                    Canvas.SetLeft(ellipse, minX);
-                    Canvas.SetTop(ellipse, minY);
+                    Canvas.SetLeft(ellipse, Math.Min(startPoint.X, currentPoint.X));
+                    Canvas.SetTop(ellipse, Math.Min(startPoint.Y, currentPoint.Y));
                 }
             }
         }
@@ -463,17 +519,18 @@ namespace Paint1
             if (isMoving)
             {
                 isMoving = false;
-                // После перетаскивания оставляем фигуру выбранной, цвета уже сохранены
             }
-            else if (isDrawing && currentShape != null)
+            else if (isDrawing)
             {
+                isDrawing = false;
+                // Добавляем фигуру в стек отмены
                 if (undoStack.Count >= 5)
                     undoStack.RemoveAt(0);
                 undoStack.Add(currentShape);
+                // Выбираем нарисованную фигуру
+                SelectShape(currentShape);
                 currentShape = null;
-                isDrawing = false;
             }
         }
     }
 }
-
