@@ -35,7 +35,6 @@ namespace Paint1
         private bool isDrawingPolygon = false;
         private List<Point> polygonPoints = new List<Point>();
         private Polygon currentPolygon = null;
-        // Убираем polygonBounds, так как не используется и может вызвать исключения при расчёте
 
         public MainWindow()
         {
@@ -272,8 +271,7 @@ namespace Paint1
                 else if (selectedShape.Fill != null)
                     selectedShape.Fill = new SolidColorBrush(currentFillColor);
 
-                // Обновляем оригинальные свойства цветов и толщины, чтобы сохранить изменения при деселекте
-                // (Effect не включаем, так как это временный эффект для выделения)
+
                 shapeOriginals[selectedShape] = (
                     selectedShape.Stroke,
                     selectedShape.StrokeThickness,
@@ -332,7 +330,7 @@ namespace Paint1
                     selectedShape.StrokeThickness = orig.originalStrokeThickness;
                     selectedShape.Fill = orig.originalFill;
                 }
-                selectedShape.Effect = null; // Всегда снимаем эффект при деселекте
+                selectedShape.Effect = null;
                 shapeOriginals.Remove(selectedShape);
                 selectedShape = null;
             }
@@ -351,7 +349,6 @@ namespace Paint1
                 BlurRadius = 10,
                 Opacity = 0.7
             };
-            // Убираем расчёт bounds для полигона, так как он не нужен и может вызвать exception
         }
 
         private Shape GetHitShape(Point point)
@@ -380,9 +377,16 @@ namespace Paint1
                     isDrawingPolygon = true;
                     polygonPoints.Clear();
                     Deselect();
+                    currentPolygon = new Polygon
+                    {
+                        Stroke = new SolidColorBrush(currentStrokeColor),
+                        Fill = Brushes.Transparent,
+                        StrokeThickness = 2
+                    };
+                    Canvas1.Children.Add(currentPolygon);
                 }
                 polygonPoints.Add(clickPoint);
-                // Убираем создание/обновление currentPolygon здесь — будем делать только при завершении
+                UpdatePolygonPreview();
             }
             else
             {
@@ -411,46 +415,44 @@ namespace Paint1
 
         private void Canvas_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (selectedShape != null && selectedTool == "Polygon")
+            if (selectedShape != null && selectedTool == "Polygon" && !isDrawingPolygon)
             {
-                // При выборе полигона и ПКМ — снимаем выделение, чтобы избежать конфликтов/крахов
                 Deselect();
                 return;
             }
+
             if (selectedTool == "Polygon" && isDrawingPolygon)
             {
                 try
                 {
                     if (polygonPoints.Count >= 3)
                     {
-                        // Завершаем и создаём полигон только при завершении
-                        currentPolygon = new Polygon
+                        if (currentPolygon != null)
                         {
-                            Stroke = new SolidColorBrush(currentStrokeColor),
-                            Fill = new SolidColorBrush(currentFillColor),
-                            StrokeThickness = 2,
-                            Points = new PointCollection(polygonPoints)
-                        };
-                        Canvas1.Children.Add(currentPolygon);
-                        shapeOriginals[currentPolygon] = (currentPolygon.Stroke, currentPolygon.StrokeThickness, currentPolygon.Fill);
-
+                            currentPolygon.Fill = new SolidColorBrush(currentFillColor);
+                            shapeOriginals[currentPolygon] = (currentPolygon.Stroke, currentPolygon.StrokeThickness, currentPolygon.Fill);
+                        }
                         if (undoStack.Count >= 5)
                             undoStack.RemoveAt(0);
                         undoStack.Add(currentPolygon);
                         SelectShape(currentPolygon);
-                        currentPolygon = null;
                     }
-                    // Если точек <3, просто отменяем без добавления
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Ошибка при заверщении полигона: {ex.Message}");
-                    // Или логируй в файл, но для простоты — MessageBox
+                    MessageBox.Show($"Ошибка при завершении полигона: {ex.Message}");
+                    if (currentPolygon != null)
+                        Canvas1.Children.Remove(currentPolygon);
                 }
-                // Сбрасываем состояние
-                isDrawingPolygon = false;
-                polygonPoints.Clear();
-                currentPolygon = null;
+                finally
+                {
+                    if (currentPolygon != null && polygonPoints.Count < 3)
+                        Canvas1.Children.Remove(currentPolygon);
+
+                    isDrawingPolygon = false;
+                    polygonPoints.Clear();
+                    currentPolygon = null;
+                }
             }
         }
 
@@ -485,6 +487,10 @@ namespace Paint1
                     Canvas.SetTop(selectedShape, top + delta.Y);
                 }
                 lastMousePosition = currentPoint;
+            }
+            else if (isDrawingPolygon)
+            {
+                UpdatePolygonPreview(currentPoint);
             }
             else if (isDrawing)
             {
@@ -523,13 +529,23 @@ namespace Paint1
             else if (isDrawing)
             {
                 isDrawing = false;
-                // Добавляем фигуру в стек отмены
                 if (undoStack.Count >= 5)
                     undoStack.RemoveAt(0);
                 undoStack.Add(currentShape);
-                // Выбираем нарисованную фигуру
                 SelectShape(currentShape);
                 currentShape = null;
+            }
+        }
+        private void UpdatePolygonPreview(Point? tempPoint = null)
+        {
+            if (currentPolygon != null && polygonPoints.Count > 0)
+            {
+                PointCollection points = new PointCollection();
+                foreach (var p in polygonPoints)
+                    points.Add(p);
+                if (tempPoint.HasValue)
+                    points.Add(tempPoint.Value);
+                currentPolygon.Points = points;
             }
         }
     }
