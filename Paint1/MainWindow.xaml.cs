@@ -31,7 +31,7 @@ namespace Paint1
     {
         public Rectangle Rectangle { get; private set; }
         public ResizeMarkerType Type { get; private set; }
-        private double baseSize = 10; // Базовый размер маркера
+        private double baseSize = 10; 
 
         public ResizeMarker(ResizeMarkerType type)
         {
@@ -39,23 +39,19 @@ namespace Paint1
 
             Rectangle = new Rectangle();
 
-            // Делаем маркер круглым
             Rectangle.RadiusX = 5;
             Rectangle.RadiusY = 5;
 
-            // Настраиваем внешний вид
-            UpdateSize(1.0); // Начальный размер
+            UpdateSize(1.0);
             Rectangle.Fill = Brushes.White;
             Rectangle.Stroke = Brushes.Blue;
             Rectangle.StrokeThickness = 2;
 
-            // Устанавливаем курсор в зависимости от типа маркера
             Rectangle.Cursor = GetCursorForMarker(type);
         }
 
         public void UpdateSize(double scaleFactor)
         {
-            // Размер маркера обратно пропорционален масштабу
             double size = Math.Max(5, baseSize / scaleFactor);
             Rectangle.Width = size;
             Rectangle.Height = size;
@@ -137,16 +133,14 @@ namespace Paint1
         private double maxScale = 2.0;
         private double currentScale = 1.0;
 
-        // Новые поля для масштабирования фигур
         private List<ResizeMarker> resizeMarkers = new List<ResizeMarker>();
         private bool isResizing = false;
         private ResizeMarker activeResizeMarker = null;
         private Point resizeStartPoint;
         private Rect originalBounds;
 
-        // Новые поля для работы с SVG
         private List<ShapeInfo> shapeInfos = new List<ShapeInfo>();
-        private bool isProcessingFile = false; // Флаг для предотвращения двойных сообщений
+        private bool isProcessingFile = false;
 
         public MainWindow()
         {
@@ -162,7 +156,6 @@ namespace Paint1
             Canvas1.MouseUp += Canvas_MouseUp;
             Canvas1.MouseRightButtonDown += Canvas_MouseRightButtonDown;
 
-            // Обработчики для кнопок инструментов
             LineButton.Click += (s, e) =>
             {
                 selectedTool = "Line";
@@ -187,7 +180,6 @@ namespace Paint1
                 Deselect();
             };
 
-            // Обработчики для кнопок файлов
             NewButton.Click += NewButton_Click;
             OpenButton.Click += OpenButton_Click;
             SaveButton.Click += SaveButton_Click;
@@ -289,13 +281,10 @@ namespace Paint1
             {
                 try
                 {
-                    // Собираем информацию о всех фигурах
                     UpdateShapeInfos();
 
-                    // Генерируем SVG
                     string svgContent = GenerateSVG();
 
-                    // Сохраняем в файл
                     File.WriteAllText(saveDialog.FileName, svgContent, Encoding.UTF8);
 
                     MessageBox.Show($"Файл успешно сохранен: {saveDialog.FileName}",
@@ -325,14 +314,12 @@ namespace Paint1
             {
                 try
                 {
-                    // Очищаем текущий холст
                     Canvas1.Children.Clear();
                     shapeOriginals.Clear();
                     undoStack.Clear();
                     redoStack.Clear();
                     shapeInfos.Clear();
 
-                    // Загружаем SVG
                     LoadSVG(openDialog.FileName);
 
                     MessageBox.Show($"Файл успешно загружен: {openDialog.FileName}",
@@ -354,7 +341,6 @@ namespace Paint1
 
             foreach (UIElement element in Canvas1.Children)
             {
-                // Пропускаем маркеры изменения размера
                 if (element is Rectangle rect && resizeMarkers.Any(m => m.Rectangle == rect))
                     continue;
 
@@ -362,7 +348,6 @@ namespace Paint1
                 {
                     ShapeInfo info = new ShapeInfo();
 
-                    // Определяем тип фигуры
                     if (shape is Line line)
                     {
                         info.Type = ShapeType.Line;
@@ -370,7 +355,6 @@ namespace Paint1
                     }
                     else if (shape is Rectangle rectShape)
                     {
-                        // Проверяем, не является ли это маркером изменения размера
                         if (resizeMarkers.Any(m => m.Rectangle == rectShape))
                             continue;
 
@@ -397,10 +381,9 @@ namespace Paint1
                     }
                     else
                     {
-                        continue; // Пропускаем неизвестные фигуры
+                        continue; 
                     }
 
-                    // Получаем цвета
                     if (shape.Stroke is SolidColorBrush strokeBrush)
                     {
                         info.StrokeColor = strokeBrush.Color;
@@ -434,14 +417,12 @@ namespace Paint1
         {
             StringBuilder svgBuilder = new StringBuilder();
 
-            // Заголовок SVG
             svgBuilder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>");
             svgBuilder.AppendLine($"<svg width=\"{Canvas1.Width}\" height=\"{Canvas1.Height}\" ");
             svgBuilder.AppendLine("     xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\">");
             svgBuilder.AppendLine("  <title>Paint App Drawing</title>");
             svgBuilder.AppendLine("  <desc>Drawing created with Paint App</desc>");
 
-            // Добавляем каждую фигуру
             foreach (ShapeInfo info in shapeInfos)
             {
                 string shapeSvg = ShapeToSVG(info);
@@ -460,7 +441,6 @@ namespace Paint1
         {
             StringBuilder shapeSVG = new StringBuilder();
 
-            // Общие атрибуты
             string strokeColor = ColorToHex(info.StrokeColor);
             string fillColor = info.FillColor == Colors.Transparent ? "none" : ColorToHex(info.FillColor);
 
@@ -524,15 +504,12 @@ namespace Paint1
         {
             try
             {
-                // Читаем SVG файл
                 XmlDocument xmlDoc = new XmlDocument();
                 xmlDoc.Load(filePath);
 
-                // Находим все элементы фигур
                 XmlNamespaceManager nsmgr = new XmlNamespaceManager(xmlDoc.NameTable);
                 nsmgr.AddNamespace("svg", "http://www.w3.org/2000/svg");
 
-                // Обрабатываем линии
                 XmlNodeList lines = xmlDoc.SelectNodes("//svg:line", nsmgr);
                 if (lines != null)
                 {
@@ -542,7 +519,6 @@ namespace Paint1
                     }
                 }
 
-                // Обрабатываем прямоугольники
                 XmlNodeList rects = xmlDoc.SelectNodes("//svg:rect", nsmgr);
                 if (rects != null)
                 {
@@ -552,7 +528,6 @@ namespace Paint1
                     }
                 }
 
-                // Обрабатываем эллипсы
                 XmlNodeList ellipses = xmlDoc.SelectNodes("//svg:ellipse", nsmgr);
                 if (ellipses != null)
                 {
@@ -562,7 +537,6 @@ namespace Paint1
                     }
                 }
 
-                // Обрабатываем полигоны
                 XmlNodeList polygons = xmlDoc.SelectNodes("//svg:polygon", nsmgr);
                 if (polygons != null)
                 {
@@ -572,7 +546,6 @@ namespace Paint1
                     }
                 }
 
-                // Также обрабатываем полилинии (polyline)
                 XmlNodeList polylines = xmlDoc.SelectNodes("//svg:polyline", nsmgr);
                 if (polylines != null)
                 {
@@ -665,7 +638,6 @@ namespace Paint1
             Color fillColor = GetColorAttribute(ellipseNode, "fill", Colors.Transparent);
             double strokeWidth = GetDoubleAttribute(ellipseNode, "stroke-width", 2);
 
-            // Преобразуем параметры эллипса в параметры WPF Ellipse
             double x = cx - rx;
             double y = cy - ry;
             double width = rx * 2;
@@ -701,7 +673,6 @@ namespace Paint1
             string pointsStr = GetStringAttribute(polygonNode, "points", "");
             if (string.IsNullOrEmpty(pointsStr)) return;
 
-            // Парсим точки
             List<Point> points = ParsePoints(pointsStr);
 
             if (points.Count < 2) return;
@@ -736,7 +707,6 @@ namespace Paint1
             string pointsStr = GetStringAttribute(polylineNode, "points", "");
             if (string.IsNullOrEmpty(pointsStr)) return;
 
-            // Парсим точки
             List<Point> points = ParsePoints(pointsStr);
 
             if (points.Count < 2) return;
@@ -745,7 +715,6 @@ namespace Paint1
             Color fillColor = GetColorAttribute(polylineNode, "fill", Colors.Transparent);
             double strokeWidth = GetDoubleAttribute(polylineNode, "stroke-width", 2);
 
-            // Преобразуем полилинию в полигон (замкнем ее)
             Polygon polygon = new Polygon
             {
                 Points = new PointCollection(points),
@@ -771,7 +740,6 @@ namespace Paint1
         {
             List<Point> points = new List<Point>();
 
-            // Разделяем строку по пробелам и запятым
             string[] tokens = pointsStr.Split(new char[] { ' ', ',', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
 
             for (int i = 0; i < tokens.Length; i += 2)
@@ -844,7 +812,6 @@ namespace Paint1
                     }
                     else if (value.StartsWith("rgba"))
                     {
-                        // Парсим rgba(r,g,b,a)
                         string values = value.TrimStart("rgba(".ToCharArray()).TrimEnd(')');
                         string[] parts = values.Split(',');
                         if (parts.Length == 4)
@@ -859,7 +826,6 @@ namespace Paint1
                     }
                     else if (value.StartsWith("rgb"))
                     {
-                        // Парсим rgb(r,g,b)
                         string values = value.TrimStart("rgb(".ToCharArray()).TrimEnd(')');
                         string[] parts = values.Split(',');
                         if (parts.Length == 3)
@@ -873,7 +839,6 @@ namespace Paint1
                     }
                     else
                     {
-                        // Попробуем распознать именованные цвета
                         switch (value.ToLower())
                         {
                             case "black": return Colors.Black;
@@ -891,7 +856,6 @@ namespace Paint1
                 }
                 catch
                 {
-                    // В случае ошибки возвращаем цвет по умолчанию
                 }
             }
             return defaultColor;
@@ -901,7 +865,6 @@ namespace Paint1
         {
             Point clickPoint = e.GetPosition(Canvas1);
 
-            // Проверяем, не кликнули ли мы по маркеру изменения размера
             foreach (var marker in resizeMarkers)
             {
                 if (marker.Rectangle.IsMouseOver)
@@ -910,7 +873,6 @@ namespace Paint1
                     isResizing = true;
                     resizeStartPoint = clickPoint;
 
-                    // Сохраняем исходные границы фигуры
                     if (selectedShape != null)
                     {
                         originalBounds = GetShapeBounds(selectedShape);
@@ -1096,7 +1058,6 @@ namespace Paint1
             double deltaX = currentPoint.X - resizeStartPoint.X;
             double deltaY = currentPoint.Y - resizeStartPoint.Y;
 
-            // Используем единый подход для всех фигур - изменение ограничивающего прямоугольника
             if (selectedShape is Line line)
             {
                 ResizeLineLikeRectangle(line, deltaX, deltaY);
@@ -1120,13 +1081,11 @@ namespace Paint1
 
         private void ResizeLineLikeRectangle(Line line, double deltaX, double deltaY)
         {
-            // Получаем текущие координаты линии
             double x1 = line.X1;
             double y1 = line.Y1;
             double x2 = line.X2;
             double y2 = line.Y2;
 
-            // Находим границы линии
             double minX = Math.Min(x1, x2);
             double maxX = Math.Max(x1, x2);
             double minY = Math.Min(y1, y2);
@@ -1134,10 +1093,8 @@ namespace Paint1
             double width = maxX - minX;
             double height = maxY - minY;
 
-            // Минимальный размер
             double minSize = 5;
 
-            // Обновляем границы в зависимости от активного маркера
             switch (activeResizeMarker.Type)
             {
                 case ResizeMarkerType.TopLeft:
@@ -1176,15 +1133,12 @@ namespace Paint1
                     break;
             }
 
-            // Обновляем новые границы
             maxX = minX + width;
             maxY = minY + height;
 
-            // Определяем, какая точка линии была левой/правой
             bool x1WasLeft = x1 <= x2;
             bool y1WasTop = y1 <= y2;
 
-            // Обновляем координаты линии в соответствии с новыми границами
             if (x1WasLeft)
             {
                 line.X1 = minX;
@@ -1218,7 +1172,6 @@ namespace Paint1
             if (double.IsNaN(left)) left = 0;
             if (double.IsNaN(top)) top = 0;
 
-            // Минимальный размер
             double minSize = 5;
 
             switch (activeResizeMarker.Type)
@@ -1275,7 +1228,6 @@ namespace Paint1
             if (double.IsNaN(left)) left = 0;
             if (double.IsNaN(top)) top = 0;
 
-            // Минимальный размер
             double minSize = 5;
 
             switch (activeResizeMarker.Type)
@@ -1326,29 +1278,23 @@ namespace Paint1
         {
             if (polygon.Points.Count == 0) return;
 
-            // Получаем точки полигона
             List<Point> points = polygon.Points.ToList();
 
-            // Находим границы
             double minX = points.Min(p => p.X);
             double minY = points.Min(p => p.Y);
             double maxX = points.Max(p => p.X);
             double maxY = points.Max(p => p.Y);
 
-            // Старые размеры
             double oldWidth = maxX - minX;
             double oldHeight = maxY - minY;
 
-            // Новые границы (пока такие же как старые)
             double newMinX = minX;
             double newMinY = minY;
             double newMaxX = maxX;
             double newMaxY = maxY;
 
-            // Минимальный размер
             double minSize = 5;
 
-            // Изменяем только одну сторону за раз, в зависимости от маркера
             switch (activeResizeMarker.Type)
             {
                 case ResizeMarkerType.TopLeft:
@@ -1388,39 +1334,30 @@ namespace Paint1
                     break;
             }
 
-            // Новые размеры
             double newWidth = newMaxX - newMinX;
             double newHeight = newMaxY - newMinY;
 
-            // Проверяем минимальные размеры
             if (newWidth < minSize || newHeight < minSize) return;
 
-            // Масштабируем точки
             PointCollection newPoints = new PointCollection();
 
-            // Простой линейный масштаб
             double scaleX = oldWidth > 0 ? newWidth / oldWidth : 1.0;
             double scaleY = oldHeight > 0 ? newHeight / oldHeight : 1.0;
 
-            // Центр старых границ
             double oldCenterX = (minX + maxX) / 2;
             double oldCenterY = (minY + maxY) / 2;
 
-            // Центр новых границ
             double newCenterX = (newMinX + newMaxX) / 2;
             double newCenterY = (newMinY + newMaxY) / 2;
 
             foreach (Point point in points)
             {
-                // Относительные координаты от старого центра
                 double relX = point.X - oldCenterX;
                 double relY = point.Y - oldCenterY;
 
-                // Масштабируем
                 double scaledX = relX * scaleX;
                 double scaledY = relY * scaleY;
 
-                // Новые координаты относительно нового центра
                 double newX = newCenterX + scaledX;
                 double newY = newCenterY + scaledY;
 
@@ -1572,7 +1509,6 @@ namespace Paint1
                 ZoomSlider.Value = currentScale;
                 UpdateZoomText();
 
-                // Обновляем размеры маркеров при изменении масштаба
                 UpdateResizeMarkersSize();
             }
         }
@@ -1620,7 +1556,6 @@ namespace Paint1
 
             UpdateZoomText();
 
-            // Обновляем размеры маркеров при изменении масштаба
             UpdateResizeMarkersSize();
         }
 
@@ -1635,7 +1570,6 @@ namespace Paint1
             ZoomSlider.Value = currentScale;
             UpdateZoomText();
 
-            // Обновляем размеры маркеров при сбросе масштаба
             UpdateResizeMarkersSize();
         }
 
@@ -1775,11 +1709,9 @@ namespace Paint1
 
             Rect bounds = GetShapeBounds(selectedShape);
 
-            // Добавляем отступ для маркеров (зависит от масштаба)
             double padding = 15 / currentScale;
             bounds.Inflate(padding, padding);
 
-            // Создаем маркеры для всех 8 позиций
             CreateResizeMarker(bounds.Left, bounds.Top, ResizeMarkerType.TopLeft);
             CreateResizeMarker(bounds.Left + bounds.Width / 2, bounds.Top, ResizeMarkerType.TopMiddle);
             CreateResizeMarker(bounds.Right, bounds.Top, ResizeMarkerType.TopRight);
@@ -1793,8 +1725,6 @@ namespace Paint1
         private void CreateResizeMarker(double x, double y, ResizeMarkerType type)
         {
             var marker = new ResizeMarker(type);
-
-            // Устанавливаем размер маркера в зависимости от текущего масштаба
             marker.UpdateSize(currentScale);
 
             Canvas.SetLeft(marker.Rectangle, x - marker.Rectangle.Width / 2);
@@ -2015,7 +1945,6 @@ namespace Paint1
                 Canvas1.Children.Remove(selectedShape);
                 undoStack.Remove(selectedShape);
 
-                // Удаляем также все маркеры изменения размера для этой фигуры
                 HideResizeMarkers();
 
                 Deselect();
@@ -2027,19 +1956,16 @@ namespace Paint1
             }
             else if (selectedShape != null && Keyboard.IsKeyDown(Key.LeftCtrl) && e.Key == Key.Add)
             {
-                // Увеличить выбранную фигуру на 10%
                 ScaleSelectedShape(1.1);
                 e.Handled = true;
             }
             else if (selectedShape != null && Keyboard.IsKeyDown(Key.LeftCtrl) && e.Key == Key.Subtract)
             {
-                // Уменьшить выбранную фигуру на 10%
                 ScaleSelectedShape(0.9);
                 e.Handled = true;
             }
             else if (selectedShape != null && e.Key == Key.Escape)
             {
-                // Отмена выделения
                 Deselect();
                 e.Handled = true;
             }
@@ -2071,11 +1997,9 @@ namespace Paint1
 
             if (selectedShape is Line line)
             {
-                // Для линии масштабируем как прямоугольник
                 double centerX = (line.X1 + line.X2) / 2;
                 double centerY = (line.Y1 + line.Y2) / 2;
 
-                // Вычисляем новые координаты относительно центра
                 double newX1 = centerX + (line.X1 - centerX) * scaleFactor;
                 double newY1 = centerY + (line.Y1 - centerY) * scaleFactor;
                 double newX2 = centerX + (line.X2 - centerX) * scaleFactor;
@@ -2088,7 +2012,6 @@ namespace Paint1
             }
             else if (selectedShape is Polygon polygon)
             {
-                // Для полигона масштабируем от центра как у прямоугольника
                 Point center = new Point(
                     bounds.Left + bounds.Width / 2,
                     bounds.Top + bounds.Height / 2
@@ -2163,7 +2086,6 @@ namespace Paint1
                 undoStack.RemoveAt(undoStack.Count - 1);
                 Canvas1.Children.Remove(lastShape);
 
-                // Если отменяемая фигура была выделена, снимаем выделение
                 if (selectedShape == lastShape)
                 {
                     Deselect();
@@ -2188,8 +2110,6 @@ namespace Paint1
                     undoStack.RemoveAt(0);
 
                 undoStack.Add(lastUndoneShape);
-
-                // Автоматически выделяем восстановленную фигуру
                 SelectShape(lastUndoneShape);
             }
         }

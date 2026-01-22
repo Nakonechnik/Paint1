@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Paint1"
         mc:Ignorable="d"
-        Title="Paint App с сохранением SVG" Height="850" Width="1200"
+        Title="Paint" Height="850" Width="1200"
         KeyDown="MainWindow_KeyDown">
     <Window.Resources>
         <Style x:Key="HueSliderStyle" TargetType="Slider">
